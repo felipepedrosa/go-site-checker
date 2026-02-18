@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -29,6 +30,12 @@ var urlRegex = regexp.MustCompile(
 )
 
 func main() {
+	if timeout := flag.Int("timeout", 2, "HTTP request timeout in seconds"); timeout != nil {
+		configureHttpClientTimeout(*timeout)
+	}
+
+	flag.Parse()
+
 	addresses := os.Args[1:]
 
 	if len(addresses) == 0 {
@@ -38,6 +45,10 @@ func main() {
 
 	statuses := checkAddresses(addresses)
 	printStatuses(filterProcessed(statuses))
+}
+
+func configureHttpClientTimeout(timeout int) {
+	httpClient.Timeout = time.Duration(timeout) * time.Second
 }
 
 func checkAddresses(addresses []string) []StatusResponse {
