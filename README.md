@@ -69,7 +69,8 @@ Como dev Java/Kotlin, estes foram os pontos de maior atenção e aprendizado:
 
 ## Próximos passos / ideias
 
-- [ ] Adicionar flag `-timeout` para configurar o timeout via CLI
+- [x] Adicionar flag `-timeout` para configurar o timeout via CLI
+- [x] Suportar leitura de URLs a partir de uma listagem
 - [ ] Suportar leitura de URLs a partir de um arquivo
 - [ ] Escrever testes unitários com o pacote `testing`
 - [ ] Exportar resultado em JSON ou CSV

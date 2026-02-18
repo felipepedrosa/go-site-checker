@@ -20,6 +20,11 @@ type StatusResponse struct {
 	Status int
 }
 
+type FlagsUsed struct {
+	Timeout   bool
+	Addresses bool
+}
+
 var urlRegex = regexp.MustCompile(
 	`^(https?|ftp)://` +
 		`(([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}` +
@@ -30,21 +35,37 @@ var urlRegex = regexp.MustCompile(
 )
 
 func main() {
-	if timeout := flag.Int("timeout", 2, "HTTP request timeout in seconds"); timeout != nil {
-		configureHttpClientTimeout(*timeout)
-	}
+	timeout := flag.Int("timeout", 2, "HTTP request timeout in seconds")
+	addresses := flag.String("addresses", "", `Addresses to be checked, if multiple use ';' as separator ("http://www.google.com.br;https://facebook.com")`)
 
 	flag.Parse()
 
-	addresses := os.Args[1:]
+	flagsUsed := &FlagsUsed{}
 
-	if len(addresses) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: app <url> [url...]")
+	if timeout != nil && *timeout != 2 {
+		flagsUsed.Timeout = true
+		configureHttpClientTimeout(*timeout)
+	}
+
+	if *addresses != "" {
+		flagsUsed.Addresses = true
+	}
+
+	addressesSlice := strings.Split(*addresses, ";")
+	fmt.Printf("address slice len = %d\n", len(addressesSlice))
+
+	if len(addressesSlice) >= 1 && addressesSlice[0] == "" {
+		fmt.Fprintln(os.Stderr, `usage: app --addresses "address1;address2;..."`)
 		os.Exit(1)
 	}
 
-	statuses := checkAddresses(addresses)
-	printStatuses(filterProcessed(statuses))
+	for i, addr := range addressesSlice {
+		addressesSlice[i] = strings.TrimSpace(addr)
+	}
+
+	statuses := checkAddresses(addressesSlice)
+	validStatuses := filterProcessed(statuses)
+	printStatuses(validStatuses)
 }
 
 func configureHttpClientTimeout(timeout int) {
