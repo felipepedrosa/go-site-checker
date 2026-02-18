@@ -25,8 +25,10 @@ type StatusResponse struct {
 
 type FlagsUsed struct {
 	Timeout   bool
-	Addresses bool
-	JsonFile  bool
+	Addresses string
+	JSONFile  bool
+	Export    bool
+	FilePath  string
 }
 
 const (
@@ -34,49 +36,104 @@ const (
 	timeoutFlag    = "timeout"
 	fileFlag       = "file"
 	filePathFlag   = "filepath"
+	exportFlag     = "export"
 	defaultTimeout = 2
 	minTableWidth  = 15
 )
 
 func main() {
+	flagsUsed := configureFlags()
+	addresses := getAddresses(flagsUsed)
+
+	if flagsUsed.Export {
+		exportToCSV(addresses)
+	} else {
+		printStatuses(addresses)
+	}
+}
+
+func getAddresses(flags *FlagsUsed) []StatusResponse {
+	var addressesSlice []string
+	if flags.JSONFile {
+		addressesSlice = getAddressesFromFile(flags.FilePath)
+	} else {
+		addressesSlice = getAddressesFromCommandLine(flags.Addresses)
+	}
+
+	statuses := checkAddresses(addressesSlice)
+	return filterProcessed(statuses)
+}
+
+func configureFlags() *FlagsUsed {
+	flagsUsed := &FlagsUsed{}
 	timeout := flag.Int(timeoutFlag, defaultTimeout, "HTTP request timeout in seconds")
 	addresses := flag.String(addressFlag, "", `Addresses to be checked, if multiple use ';' as separator ("http://www.google.com.br;https://facebook.com")`)
 	useFile := flag.Bool(fileFlag, false, "Set to true to read addresses from a JSON file")
 	filePath := flag.String(filePathFlag, "addresses.json", "Path to the JSON file containing addresses (used with --file)")
+	export := flag.Bool(exportFlag, false, "Set to true to export results to a CSV file")
 	flag.Parse()
 
-	flagsUsed := &FlagsUsed{}
 	if *timeout <= 0 {
 		fmt.Fprintln(os.Stderr, "timeout must be greater than 0")
 		os.Exit(1)
 	}
 
-	if *timeout != 2 {
+	if *timeout != defaultTimeout {
 		flagsUsed.Timeout = true
 		configureHttpClientTimeout(*timeout)
 	}
 
 	if *addresses != "" {
-		flagsUsed.Addresses = true
+		flagsUsed.Addresses = *addresses
 	}
 
 	if *useFile {
-		flagsUsed.JsonFile = true
+		flagsUsed.JSONFile = true
 	}
+
+	if *export {
+		flagsUsed.Export = true
+	}
+
+	flagsUsed.FilePath = *filePath
 
 	checkAtLeastOneFlagUsed(flagsUsed)
 	checkConflictingFlags(flagsUsed)
 
-	var addressesSlice []string
-	if flagsUsed.JsonFile {
-		addressesSlice = getAddressesFromFile(*filePath)
-	} else {
-		addressesSlice = getAddressesFromCommandLine(*addresses)
+	return flagsUsed
+}
+
+func exportToCSV(responses []StatusResponse) {
+	file, err := os.Create("output.csv")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating CSV file: %v\n", err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	_, err = writer.WriteString("URL;Status\n")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error writing to CSV file: %v\n", err)
+		os.Exit(1)
 	}
 
-	statuses := checkAddresses(addressesSlice)
-	validStatuses := filterProcessed(statuses)
-	printStatuses(validStatuses)
+	for _, r := range responses {
+		line := fmt.Sprintf("%s;%d\n", r.URL, r.Status)
+		_, err = writer.WriteString(line)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error writing to CSV file: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	err = writer.Flush()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error flushing CSV file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintln(os.Stdout, "results exported to output.csv")
 }
 
 func getAddressesFromFile(path string) []string {
@@ -132,14 +189,14 @@ func getAddressesFromCommandLine(addresses string) []string {
 }
 
 func checkAtLeastOneFlagUsed(flags *FlagsUsed) {
-	if !flags.Addresses && !flags.JsonFile {
+	if flags.Addresses == "" && !flags.JSONFile {
 		fmt.Fprintln(os.Stderr, "either --addresses or --file flag must be provided")
 		os.Exit(1)
 	}
 }
 
 func checkConflictingFlags(flags *FlagsUsed) {
-	if flags.Addresses && flags.JsonFile {
+	if flags.Addresses != "" && flags.JSONFile {
 		fmt.Fprintln(os.Stderr, "cannot use --addresses and --file flags together")
 		os.Exit(1)
 	}
@@ -155,19 +212,20 @@ func checkAddresses(addresses []string) []StatusResponse {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	for i := range addresses {
-		wg.Go(func() {
-			resp, err := getUrlStatus(addresses[i])
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			resp, err := getUrlStatus(addresses[index])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "error checking %s: %v\n", addresses[i], err)
+				fmt.Fprintf(os.Stderr, "error checking %s: %v\n", addresses[index], err)
 				return
 			}
 			mu.Lock()
-			statuses[i] = resp
+			statuses[index] = resp
 			mu.Unlock()
-		})
+		}(i)
 	}
 	wg.Wait()
-
 	return statuses
 }
 

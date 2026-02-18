@@ -73,5 +73,6 @@ Como dev Java/Kotlin, estes foram os pontos de maior atenção e aprendizado:
 - [x] Suportar leitura de URLs a partir de uma listagem
 - [x] Suportar leitura de URLs a partir de um arquivo
 - [ ] Escrever testes unitários com o pacote `testing`
-- [ ] Exportar resultado em JSON ou CSV
+- [x] Exportar resultado em JSON ou CSV
+- [ ] Usar `channels` ao invés de `slices` para os endereços processados
 

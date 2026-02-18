@@ -27,4 +27,8 @@ go.work
 # IntelliJ
 .idea*
 
+# Input file
 addresses.json
+
+# Output file
+output.csv
